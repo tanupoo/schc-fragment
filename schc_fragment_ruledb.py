@@ -23,6 +23,7 @@ class schc_runtime_fragment_rule:
         self.bitmap_size = (2**self.fcn_size) - 1
         self.bitmap_all_1 = (2**self.bitmap_size)-1
         self.cbit_size = 0 if self.mode == SCHC_MODE.NO_ACK else 1
+        self.pad_bits_size = 0
         #
         # sanity check the base values
         if self.rid > (2**self.C.rid_size)-1:

@@ -33,7 +33,7 @@ def schc_sender(msg):
     
     # prepare fragmenting
     factory = sfs.fragment_factory(frr, logger=debug_print)
-    factory.setbuf(msg, dtag=opt.dtag)
+    factory.setbuf(msg, dtag=opt.dtag, l2_size=opt.l2_size)
     
     # main loop
     debug_print(1, "L2 payload size: %s" % opt.l2_size)

@@ -4,6 +4,7 @@ import schc_fragment_state as sfs
 import schc_fragment_holder as sfh
 from schc_fragment_ruledb import schc_fragment_ruledb
 import micro_enum
+import math
 
 STATE = micro_enum.enum(
     FAIL = -1,
@@ -51,7 +52,16 @@ class fragment_factory:
         # only use in NO_ACK mode
         self.n_frags_sent = 0
 
-    def setbuf(self, srcbuf, dtag):
+    def get_padding_bits_size(self, l2_size, payload_size, mic_size):
+        header_size = self.R.C.rid_size + self.R.dtag_size + self.R.fcn_size + self.R.win_size
+        payload_bits_size = l2_size * 8 - header_size
+        total_payload_bits_size =  (payload_size ) * 8 + mic_size
+        no_of_fragments = math.ceil(total_payload_bits_size/payload_bits_size)
+        padding_bits_size = ((no_of_fragments * payload_bits_size) - total_payload_bits_size) % 8
+        self.logger(1,"padding_bits_size:",padding_bits_size)
+        return padding_bits_size
+
+    def setbuf(self, srcbuf, dtag, l2_size):
         '''
         srcbuf: holder of the data to be sent.
         dtag: dtag number.
@@ -65,9 +75,25 @@ class fragment_factory:
                       v             v
         srcbuf |.........................
         '''
+        pad_bits_size = self.get_padding_bits_size(l2_size, len(srcbuf), self.R.C.mic_size)
+
+
+        '''
+        if pad_bits_size is non-zero, add extra-bits to pad_bits_size to make it 1 byte of padding.
+        this is done to make use of existing crc functions.
+        extra-bits is just used for mic calculation and are not transmitted.
+        TODO: remove the extra-bits while transmitting.
+        '''
+        if pad_bits_size != 0:
+            pad_byte = b'\x00'
+        else:
+            pad_byte = b''
+
         if type(srcbuf) == str:
+            srcbuf += pad_byte.decode("utf-8")
             self.srcbuf = bytearray(srcbuf, "utf-8")
         elif type(srcbuf) in [bytearray, bytes]:
+            srcbuf += pad_byte
             self.srcbuf = bytearray(srcbuf)
         else:
             raise TypeError("srcbuf must be str, bytes or bytearray.")
@@ -80,9 +106,10 @@ class fragment_factory:
         self.__init_window()
         self.state = sfs.fragment_state(STATE, logger=self.logger)
         self.state.set(STATE.INIT)
+        self.pad_bits_size = pad_bits_size
 
     def get_payload_base_size(self, l2_size):
-        h = self.R.C.rid_size + self.R.dtag_size + self.R.fcn_size
+        h = self.R.C.rid_size + self.R.dtag_size + self.R.fcn_size + self.R.win_size
         max_pyld_size = rdu8(l2_size*8 - h)
         min_pyld_size = rdu8(l2_size*8 - h - self.mic_size)
         if max_pyld_size < 1:
@@ -291,4 +318,3 @@ class fragment_factory:
                 return self.state.set(STATE.WIN_DONE), fgh
             elif self.state.get() == STATE.SEND_ALL1:
                 return self.state.set(STATE.DONE), fgh
-
